@@ -105,16 +105,38 @@ Environment variables (all optional except the first two for live mode):
 4. Push a commit / trigger a Vercel deployment: the signed webhook appears in the Activity view with source `Vercel`.
 5. Open Settings, add a Linear personal API key, then use **Escalate to Linear** on an incident. The Linear identifier appears on the card, in the drawer and in the activity stream.
 
-Verification performed during the build: migration applied (6 incidents / 10 updates / 9 signals / 19 activity rows, 4 realtime tables), `ingest-event` returned `200` and inserted a row, `escalate-linear` returned the expected `428 linear_key_required` without a key, `npm run typecheck` and `npm run build` passed.
+Verification performed: both migrations applied (four realtime tables, guardrails and `relay_qa_snapshot`), `ingest-event` returned `200` and inserted a row, `escalate-linear` returned the expected `428 linear_key_required` without a key, the atomic `relay_confirm_signal` helper was exercised, `npm test` (27 checks), `npm run typecheck` and `npm run build` all passed in CI.
 
 ---
 
 ## Security note
 
-RLS policies in this repository intentionally allow anonymous reads and writes so that public field reporting works without sign-in. That is appropriate for a demo board, **not** for a production civic system. Before a real public launch: enable Supabase Auth, scope incident mutations to authenticated responders, add rate limiting on signal intake, and rotate the webhook secrets. This follow-up is tracked as `PAV-10` in Linear.
+RLS policies intentionally allow anonymous reads and writes so that public field reporting works without sign-in. Release 1.1 adds defence in depth without hurting the demo: length/range constraints on every client-writable column, a `relay_guard_signal_insert` trigger that normalises text and caps intake at 60 reports per minute, and an atomic `relay_confirm_signal` RPC that prevents lost confirmation updates.
+
+Before a real public launch, still enable Supabase Auth and scope incident mutations to authenticated responders. Anonymous sign-ins are not enabled on this project and there is no SMTP provider configured, so a full email sign-in flow is deliberately deferred rather than faked. This follow-up remains tracked as `PAV-10` in Linear.
 
 ---
 
 ## Interface notes
 
 Dark operations-console visual system: deep slate surfaces, hairline borders, teal / amber / coral / sky status accents, monospace identifiers and timestamps. All iconography is inline SVG (`lucide-react`). No purple or violet gradients, no emoji. Layout is responsive from wide command displays down to a single-column mobile board, with a slide-in navigation rail, a detail drawer and keyboard shortcuts.
+
+---
+
+## Release 1.1 updates
+
+| Area | Change |
+| --- | --- |
+| Automated QA | 27 Vitest checks across seven test files covering formatting/metrics, seed integrity, demo store actions, component rendering, the overview view and GitHub commit mapping. `npm test` runs in CI before the build. |
+| Named tester | **Automated tester:** the Vitest suite in GitHub Actions CI. **Human tester and reviewer:** Pavan Dommeti, the only human member of Linear team `PAV`, tracked by `PAV-11` (`qa` label). Both are shown in the Engineering → Verification and tester panel. |
+| Realtime resilience | A `postgres_changes` reconnect now re-reads all four tables so events missed while the socket was down are recovered. A live/demo/linking chip is visible in the topbar. |
+| Concurrency | Simultaneous incident creation retries on a `23505` unique-code collision; signal confirmations use the atomic `relay_confirm_signal(uuid)` function instead of a read-modify-write. |
+| Linear readiness | `escalate-linear` now supports `action: "verify"`, which validates a Linear API key against the `viewer` query without creating an issue. Settings has a **Test connection** button and a CONFIGURED / NOT SET indicator. |
+| Database guardrails | `supabase/migrations/0002_relay_guardrails.sql`: validation constraints, intake rate limiting, atomic confirmations, and the `relay_qa_snapshot` view. |
+| Presentation | Version `1.1.0`, a `QA tester` operator role, connection chip, key-verification UI and the verification panel. Palette remains teal / amber / coral / sky; no purple gradients, no emojis. |
+
+### Why a Linear API key is still needed
+
+Linear escalation calls Linear's GraphQL API at runtime. The Linear connector in this workspace exposes issue/project management but does not expose a personal API key or OAuth token, so no server-side key can be provisioned automatically. The escalation function already reads a `LINEAR_API_KEY` project secret if an admin sets one; otherwise the operator pastes a personal key in Settings (stored only in that browser). **Test connection** makes that setup verifiable without creating a throwaway issue.
+
+Run locally with `npm test`, or open the Engineering view in production to see exactly who tested what.

@@ -9,6 +9,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
+import { CONSTANTS } from "../lib/config";
 import type { ConnectionState } from "../lib/store";
 import type { PresenceUser, ViewId } from "../lib/types";
 import { Avatar } from "./ui";
@@ -138,7 +139,7 @@ export function Sidebar({
           <Settings2 size={17} strokeWidth={1.9} />
           <span>Settings</span>
         </button>
-        <div className="sidebar-version">RELAY / 1.0.0 · APCR</div>
+        <div className="sidebar-version">RELAY / {CONSTANTS.version} · APCR</div>
       </aside>
     </>
   );

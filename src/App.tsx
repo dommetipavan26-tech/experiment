@@ -105,6 +105,7 @@ function Console() {
           onNewSignal={() => setModal("signal")}
           onSettings={() => setModal("settings")}
           onNotifications={() => setView("activity")}
+          connection={connection}
           unread={unread}
         />
         <div className="content">
