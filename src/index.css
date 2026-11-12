@@ -589,7 +589,7 @@ h1, h2, h3, p { margin: 0; }
 .timeline-dot.kind-status { background: var(--teal); }
 .timeline-dot.kind-assignment { background: var(--amber); }
 .timeline-dot.kind-system { background: var(--sky); }
-.timeline-dot.kind-linear { background: #8a9df0; }
+.timeline-dot.kind-linear { background: var(--sky); }
 .timeline-content p { font-size: 11.8px; line-height: 1.5; color: var(--text-soft); }
 .timeline-meta { display: block; margin-top: 5px; font-size: 10px; color: var(--text-faint); }
 .timeline-empty { font-size: 11px; color: var(--text-faint); padding-left: 18px; }

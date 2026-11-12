@@ -15,7 +15,7 @@ export function SituationStrip({
   const critical = open.filter((i) => i.severity === "critical");
   const unreviewed = signals.filter((s) => s.status === "new");
   const headline = critical.length
-    ? `${critical.length} critical incident${critical.length > 1 ? "s" : ""} need attention`
+    ? `${critical.length} critical incident${critical.length > 1 ? "s" : ""} ${critical.length > 1 ? "need" : "needs"} attention`
     : open.length
       ? `${open.length} active incident${open.length > 1 ? "s" : ""} under coordination`
       : "No active incidents in the region";
