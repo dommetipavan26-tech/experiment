@@ -1,7 +1,9 @@
 // Relay / escalate-linear
-// Creates a Linear issue for a live Relay incident and writes the identifier
-// back to the incident, its timeline and the realtime activity stream.
-// The Linear API key is supplied by the operator in Relay settings (browser ->
+// Two actions:
+//   { action: "verify",  api_key }            -> validates a Linear API key
+//   { action: "escalate", incident_id, ... }  -> creates a Linear issue and
+//                                               writes the identifier back
+// The Linear API key is supplied by the operator in Relay Settings (browser ->
 // this function -> Linear) or from the LINEAR_API_KEY project secret.
 
 const cors: Record<string, string> = {
@@ -34,6 +36,14 @@ async function rest(path: string, init: RequestInit = {}) {
   });
 }
 
+async function linearGraphQL(apiKey: string, query: string, variables?: Record<string, unknown>) {
+  return fetch("https://api.linear.app/graphql", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: apiKey },
+    body: JSON.stringify({ query, variables }),
+  });
+}
+
 const priorityMap: Record<string, number> = { critical: 1, high: 2, medium: 3, low: 4 };
 
 const MUTATION = `mutation CreateRelayIssue($input: IssueCreateInput!) {
@@ -43,6 +53,8 @@ const MUTATION = `mutation CreateRelayIssue($input: IssueCreateInput!) {
   }
 }`;
 
+const VIEWER_QUERY = `query RelayViewer { viewer { id name email } }`;
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -51,9 +63,7 @@ Deno.serve(async (req: Request) => {
   let body: any = {};
   try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
 
-  const incidentId = String(body.incident_id ?? "");
-  if (!/^[0-9a-f-]{36}$/i.test(incidentId)) return json({ error: "invalid_incident_id" }, 400);
-
+  const action = String(body.action ?? "escalate");
   const apiKey = String(body.api_key ?? Deno.env.get("LINEAR_API_KEY") ?? "").trim();
   if (!apiKey) {
     return json({
@@ -61,6 +71,33 @@ Deno.serve(async (req: Request) => {
       message: "Add your Linear API key in Relay Settings to enable escalation.",
     }, 428);
   }
+
+  // -------------------------------------------------------------------------
+  // Verify: used by Settings -> "Test connection". Never writes anything.
+  // -------------------------------------------------------------------------
+  if (action === "verify") {
+    const res = await linearGraphQL(apiKey, VIEWER_QUERY);
+    const payload: any = await res.json().catch(() => ({}));
+    if (!res.ok || payload?.errors?.length || !payload?.data?.viewer) {
+      return json({
+        error: "linear_verify_failed",
+        detail: payload?.errors?.[0]?.message ?? `Linear returned ${res.status}`,
+      }, 502);
+    }
+    const viewer = payload.data.viewer;
+    return json({
+      ok: true,
+      viewer: { id: viewer.id, name: viewer.name, email: viewer.email },
+      team: Deno.env.get("LINEAR_TEAM_KEY") ?? "PAV",
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Escalate: create a Linear issue and write the identifier back to Relay.
+  // -------------------------------------------------------------------------
+  const incidentId = String(body.incident_id ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(incidentId)) return json({ error: "invalid_incident_id" }, 400);
+
   const teamId = String(body.team_id ?? Deno.env.get("LINEAR_TEAM_ID") ?? "");
   if (!teamId) return json({ error: "linear_team_missing" }, 500);
 
@@ -85,20 +122,13 @@ Deno.serve(async (req: Request) => {
     "Escalated from the Relay live operations console.",
   ].join("\n");
 
-  const linearRes = await fetch("https://api.linear.app/graphql", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: apiKey },
-    body: JSON.stringify({
-      query: MUTATION,
-      variables: {
-        input: {
-          teamId,
-          title: `[${incident.code}] ${incident.title}`.slice(0, 250),
-          description,
-          priority: priorityMap[incident.severity] ?? 3,
-        },
-      },
-    }),
+  const linearRes = await linearGraphQL(apiKey, MUTATION, {
+    input: {
+      teamId,
+      title: `[${incident.code}] ${incident.title}`.slice(0, 250),
+      description,
+      priority: priorityMap[incident.severity] ?? 3,
+    },
   });
   const linearJson: any = await linearRes.json().catch(() => ({}));
   if (!linearRes.ok || linearJson?.errors?.length) {

@@ -192,10 +192,19 @@ export function NewSignalModal({
 }
 
 export function SettingsModal({ onClose }: { onClose: () => void }) {
-  const { identity, setIdentity, linearKey, setLinearKey, connection, isLive, presence, notify } = useRelay();
+  const { identity, setIdentity, linearKey, setLinearKey, connection, isLive, presence, notify, actions } = useRelay();
   const [name, setName] = useState(identity.name);
   const [role, setRole] = useState(identity.role);
   const [key, setKey] = useState(linearKey);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const testKey = async () => {
+    setVerifying(true);
+    setVerifyResult(null);
+    setVerifyResult(await actions.verifyLinearKey(key));
+    setVerifying(false);
+  };
 
   const save = () => {
     setIdentity({ name: name.trim() || "Control desk", role });
@@ -249,6 +258,9 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="settings-heading">
           <KeyRound size={16} strokeWidth={1.9} />
           <span>Linear API key</span>
+          <span className={`settings-key-state ${key.trim() ? "on" : ""}`}>
+            {key.trim() ? "CONFIGURED" : "NOT SET"}
+          </span>
         </div>
         <Field
           label="Personal API key"
@@ -263,6 +275,14 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
             autoComplete="off"
           />
         </Field>
+        <div className="key-test-row">
+          <button className="btn btn-quiet" onClick={() => void testKey()} disabled={!key.trim() || verifying}>
+            {verifying ? "Checking…" : "Test connection"}
+          </button>
+          {verifyResult && (
+            <span className={`key-test-result ${verifyResult.ok ? "ok" : "bad"}`}>{verifyResult.message}</span>
+          )}
+        </div>
         <a className="text-link with-icon" href="https://linear.app/settings/api" target="_blank" rel="noreferrer">
           Open Linear API settings <ArrowUpRight size={13} strokeWidth={2} />
         </a>

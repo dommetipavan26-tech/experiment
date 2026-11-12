@@ -1,6 +1,11 @@
 import { ArrowUpRight, BarChart3, Filter, RadioTower, Siren } from "lucide-react";
 import { ActivityStream, PresencePanel } from "./components/ActivityStream";
-import { DeliveryPipeline, GithubCommitPanel, IntegrationPanel } from "./components/EngineeringPanel";
+import {
+  DeliveryPipeline,
+  GithubCommitPanel,
+  IntegrationPanel,
+  VerificationPanel,
+} from "./components/EngineeringPanel";
 import { IncidentBoard } from "./components/IncidentBoard";
 import { SignalList } from "./components/SignalList";
 import { SituationStrip, StatCards } from "./components/StatCards";
@@ -324,6 +329,7 @@ export function EngineeringView() {
         <GithubCommitPanel />
         <IntegrationPanel />
       </div>
+      <VerificationPanel />
     </div>
   );
 }

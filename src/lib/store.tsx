@@ -98,6 +98,7 @@ interface RelayContextValue {
     createSignal: (input: NewSignalInput) => Promise<string | null>;
     updateSignal: (id: string, patch: Partial<Signal>) => Promise<void>;
     escalate: (incident: Incident) => Promise<{ ok: boolean; identifier?: string; error?: string }>;
+    verifyLinearKey: (key?: string) => Promise<{ ok: boolean; message: string }>;
   };
 }
 
@@ -206,6 +207,7 @@ export function RelayProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!client) return;
     let cancelled = false;
+    let firstSubscription = true;
 
     const load = async () => {
       const [incidents, updates, signals, activity] = await Promise.all([
@@ -258,9 +260,17 @@ export function RelayProvider({ children }: { children: ReactNode }) {
       );
     }
     channel.subscribe((status: string) => {
-      if (status === "SUBSCRIBED") setConnection("live");
-      else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") setConnection("reconnecting");
-      else if (status === "CLOSED") setConnection("connecting");
+      if (status === "SUBSCRIBED") {
+        setConnection("live");
+        // A reconnect can miss changes emitted while the socket was down.
+        // Re-read the tables so every console converges on the same truth.
+        if (firstSubscription) firstSubscription = false;
+        else void load();
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        setConnection("reconnecting");
+      } else if (status === "CLOSED") {
+        setConnection("connecting");
+      }
     });
 
     return () => {
@@ -376,7 +386,7 @@ export function RelayProvider({ children }: { children: ReactNode }) {
     return {
       async createIncident(input: NewIncidentInput) {
         const now = new Date().toISOString();
-        const row: Incident = {
+        let row: Incident = {
           id: uid(),
           code: nextIncidentCode(state.incidents),
           title: input.title.trim(),
@@ -395,10 +405,20 @@ export function RelayProvider({ children }: { children: ReactNode }) {
           resolved_at: null,
         };
         if (client) {
-          const { error } = await client.from("incidents").insert(row);
-          if (error) {
-            fail(error.message);
-            return null;
+          // Two operators can open an incident at the same moment. Retry with
+          // the next code if Postgres rejects the unique constraint (23505).
+          let attempt = 0;
+          for (;;) {
+            const { error } = await client.from("incidents").insert(row);
+            if (!error) break;
+            const isCollision = error.code === "23505";
+            if (!isCollision || attempt >= 4) {
+              fail(error.message);
+              return null;
+            }
+            attempt += 1;
+            const base = Number.parseInt(row.code.replace(/\D/g, ""), 10) || 2040;
+            row = { ...row, code: `INC-${base + attempt}` };
           }
           optimisticAdd("incidents", row);
           await addUpdate(row.id, "Incident opened in Relay.", "system");
@@ -499,7 +519,25 @@ export function RelayProvider({ children }: { children: ReactNode }) {
       },
 
       async updateSignal(id: string, patch: Partial<Signal>) {
+        const confirmationOnly =
+          Object.keys(patch).length === 1 && typeof patch.confirmations === "number";
         if (client) {
+          if (confirmationOnly) {
+            // Atomic increment on the server: simultaneous confirmations from
+            // different consoles can never overwrite one another.
+            const { data, error } = await client.rpc("relay_confirm_signal", { p_id: id });
+            if (error) {
+              const fallback = await client
+                .from("signals")
+                .update({ confirmations: patch.confirmations })
+                .eq("id", id);
+              if (fallback.error) return fail(fallback.error.message);
+              optimisticPatch("signals", id, patch as Record<string, unknown>);
+            } else {
+              optimisticPatch("signals", id, { confirmations: Number(data ?? 0) });
+            }
+            return;
+          }
           const { error } = await client.from("signals").update(patch).eq("id", id);
           if (error) return fail(error.message);
           optimisticPatch("signals", id, patch as Record<string, unknown>);
@@ -554,6 +592,36 @@ export function RelayProvider({ children }: { children: ReactNode }) {
           return { ok: true, identifier: data?.identifier };
         } catch (error) {
           return { ok: false, error: error instanceof Error ? error.message : "Network error" };
+        }
+      },
+
+      async verifyLinearKey(keyOverride?: string) {
+        const candidate = (keyOverride ?? linearKey).trim();
+        if (!CONFIG.edgeBase) {
+          return { ok: false, message: "A live Supabase connection is required." };
+        }
+        if (!candidate) {
+          return { ok: false, message: "Add a Linear personal API key first." };
+        }
+        try {
+          const res = await fetch(`${CONFIG.edgeBase}/escalate-linear`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "verify", api_key: candidate }),
+          });
+          const data: any = await res.json().catch(() => ({}));
+          if (!res.ok) {
+            return {
+              ok: false,
+              message: String(data?.detail ?? data?.message ?? data?.error ?? `HTTP ${res.status}`),
+            };
+          }
+          return {
+            ok: true,
+            message: `Connected as ${data?.viewer?.name ?? "Linear user"}${data?.viewer?.email ? ` (${data.viewer.email})` : ""}.`,
+          };
+        } catch (error) {
+          return { ok: false, message: error instanceof Error ? error.message : "Network error" };
         }
       },
     };

@@ -8,7 +8,7 @@ on:
 
 jobs:
   verify:
-    name: Typecheck and build
+    name: Test, typecheck and build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,6 +22,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Test
+        run: npm test
       - name: Build
         run: npm run build
         env:
@@ -29,3 +31,4 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_GITHUB_REPO: ${{ vars.VITE_GITHUB_REPO }}
           VITE_LINEAR_TEAM_KEY: ${{ vars.VITE_LINEAR_TEAM_KEY }}
+          VITE_QA_REVIEWER: ${{ vars.VITE_QA_REVIEWER }}

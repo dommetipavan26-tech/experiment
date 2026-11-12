@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Menu, Plus, Radio, Search, Settings2 } from "lucide-react";
 import { CONSTANTS } from "../lib/config";
 import { formatClock } from "../lib/format";
+import type { ConnectionState } from "../lib/store";
 import type { ViewId } from "../lib/types";
 
 const TITLES: Record<ViewId, { title: string; crumb: string }> = {
@@ -21,6 +22,7 @@ export function Topbar({
   onNewSignal,
   onSettings,
   onNotifications,
+  connection,
   unread,
 }: {
   view: ViewId;
@@ -31,6 +33,7 @@ export function Topbar({
   onNewSignal: () => void;
   onSettings: () => void;
   onNotifications: () => void;
+  connection: ConnectionState;
   unread: number;
 }) {
   const [now, setNow] = useState(() => new Date());
@@ -70,6 +73,13 @@ export function Topbar({
       </div>
 
       <div className="topbar-right">
+        <span
+          className={`connection-chip ${connection === "live" ? "on" : connection === "demo" ? "demo" : ""}`}
+          title={`Realtime link: ${connection}`}
+        >
+          <span className={`pulse-dot ${connection === "live" ? "on" : connection === "demo" ? "demo" : "waiting"}`} />
+          {connection === "live" ? "LIVE" : connection === "demo" ? "DEMO" : "LINKING"}
+        </span>
         <div className="search-wrap">
           <Search size={15} strokeWidth={1.9} />
           <input

@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   ArrowUpRight,
+  Check,
   Database,
   ExternalLink,
+  FlaskConical,
   GitBranch,
   Github,
   Layers,
   RefreshCw,
   Server,
+  ShieldCheck,
   Triangle,
+  UserRound,
   Workflow,
 } from "lucide-react";
 import { CONFIG, CONSTANTS } from "../lib/config";
@@ -173,6 +177,54 @@ export function IntegrationPanel() {
             </div>
           );
         })}
+      </div>
+    </Panel>
+  );
+}
+
+export function VerificationPanel() {
+  const { connection } = useRelay();
+  return (
+    <Panel
+      title="Verification and tester"
+      subtitle="Who checks this release, and what they check"
+      actions={
+        <a className="text-link with-icon" href={CONSTANTS.linearQaIssueUrl} target="_blank" rel="noreferrer">
+          QA sign-off <ArrowUpRight size={13} strokeWidth={2} />
+        </a>
+      }
+    >
+      <div className="qa-identities">
+        <div className="qa-identity">
+          <span className="qa-icon"><FlaskConical size={18} strokeWidth={1.9} /></span>
+          <div className="qa-identity-copy">
+            <span>Automated tester</span>
+            <strong>{CONSTANTS.qaSuite}</strong>
+            <small>27 checks run on every push and pull request before deployment.</small>
+          </div>
+        </div>
+        <div className="qa-identity">
+          <span className="qa-icon"><UserRound size={18} strokeWidth={1.9} /></span>
+          <div className="qa-identity-copy">
+            <span>Human tester and reviewer</span>
+            <strong>{CONFIG.qaReviewer}</strong>
+            <small>Only human member of Linear team {CONFIG.linearTeamKey}; owns the QA sign-off issue.</small>
+          </div>
+        </div>
+      </div>
+      <div className="qa-checklist">
+        {CONSTANTS.qaChecks.map((item) => (
+          <div className="qa-check" key={item}>
+            <Check size={13} strokeWidth={2.2} />
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+      <div className="qa-footer">
+        <ShieldCheck size={14} strokeWidth={1.9} />
+        <span>
+          Release {CONSTANTS.version} · guardrails migration 0002 · realtime link {connection}
+        </span>
       </div>
     </Panel>
   );
